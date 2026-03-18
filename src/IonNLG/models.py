@@ -161,6 +161,8 @@ class Experiment(BaseModel):
             "device_platform": self.device.platform,
             "device_provider": self.device.provider,
             "device_name": self.device.name,
+            "strategy": self.circuit_data.strategy,
+            "shots": self.circuit_data.shots,
             "win_rate_value": self.win_rate.value,
             "win_rate_ci95": self.win_rate.ci95,
             "win_rate_p_value": self.win_rate.p_value,
