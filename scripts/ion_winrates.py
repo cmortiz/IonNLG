@@ -3,6 +3,9 @@
 Implements Supplementary Note 2: omega = sum_j w_j p_j with w_j = 1/88 (vertex) and
 2/88 (edge); sigma_w^2 = sum_j w_j^2 p_j (1 - p_j) / n_j; Bernstein with C = 1/min_j n_j
 (Case 1; with unequal shot counts, 1/min n_j bounds every per-shot summand).
+Confidence intervals use the plug-in variance at the measured p_j. The p-value and the leakage
+tolerance bound the null hypothesis omega <= omega_0 over all of it: sigma_w^2 is replaced by its
+largest value at each null level (water-filling), and the bound is maximised over levels <= omega_0.
 
 Usage: uv run python scripts/ion_winrates.py [raw_dir] [out_json]
 """
@@ -25,6 +28,39 @@ DELTA = 0.05
 VERTEX_WIN = {0, 5, 10, 15}  # 4-bit outcomes with Alice's two bits == Bob's two bits
 
 
+def sigma2_max(level, n):
+    """Largest sum_j W_j^2 p_j(1-p_j)/n_j subject to W.p = level: p_j = min(1, 1/2 + mu n_j / (2 W_j))."""
+    f = lambda mu: float(W @ np.clip(0.5 + mu * n / (2 * W), 0, 1)) - level
+    lo, hi = 0.0, 1.0
+    while f(hi) < 0:
+        hi *= 2
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if f(mid) < 0 else (lo, mid)
+    q = np.clip(0.5 + hi * n / (2 * W), 0, 1)
+    return float(np.sum(W**2 * q * (1 - q) / n))
+
+
+def null_log_pvalue(omega, n, level):
+    """log of sup over null levels g <= level of the one-sided Bernstein bound at the worst-case variance."""
+    c = 1 / n.min()
+    grid = np.linspace(level - 0.05, level, 2001)
+    vals = [-((omega - g) ** 2 / 2) / (sigma2_max(g, n) + c * (omega - g) / 3) for g in grid]
+    return max(vals), float(grid[int(np.argmax(vals))])
+
+
+def leakage_tolerance(omega, n, alpha=DELTA):
+    """Largest delta for which omega <= omega_c + delta is rejected at level alpha."""
+    ok = lambda d: omega - OMEGA_C - d > 0 and null_log_pvalue(omega, n, OMEGA_C + d)[0] <= math.log(alpha)
+    if not ok(0):
+        return None
+    lo, hi = 0.0, omega - OMEGA_C
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if ok(mid) else (lo, mid)
+    return lo
+
+
 def bernstein(p, n):
     p, n = np.asarray(p, float), np.asarray(n, float)
     s2 = float(np.sum(W**2 * p * (1 - p) / n))
@@ -33,8 +69,16 @@ def bernstein(p, n):
     L = math.log(2 / DELTA)
     ci = 2 * L * c / 3 + math.sqrt(2 * L * s2)
     eps = omega - OMEGA_C
-    pval = math.exp(-(eps**2 / 2) / (s2 + c * eps / 3)) if eps > 0 else None
+    pval = math.exp(null_log_pvalue(omega, n, OMEGA_C)[0]) if eps > 0 else None
     return omega, ci, pval
+
+
+def type_ci(p, n):
+    """95% half-width for an equal-weight average over one question type (same Bernstein bound, w_j = 1/k)."""
+    p, n = np.asarray(p, float), np.asarray(n, float)
+    s2 = float(np.sum(p * (1 - p) / n)) / len(p) ** 2
+    L = math.log(2 / DELTA)
+    return 2 * L / (3 * n.min()) + math.sqrt(2 * L * s2)
 
 
 def fmt(value, ci):
@@ -166,12 +210,18 @@ if __name__ == "__main__":
         assert len(p) == 51
         omega, ci, pval = bernstein(p, n)
         wv, we = float(p[:N_VERTEX].mean()), float(p[N_VERTEX:].mean())
+        civ, cie = type_ci(p[:N_VERTEX], n[:N_VERTEX]), type_ci(p[N_VERTEX:], n[N_VERTEX:])
         nstr = f"{n.min()}-{n.max()}" if n.min() != n.max() else str(n.min())
-        results[name] = dict(omega=omega, ci95=ci, p_value=pval, vertex=wv, edge=we,
+        tol = leakage_tolerance(omega, n) if pval is not None else None
+        results[name] = dict(omega=omega, ci95=ci, p_value=pval, leakage_tolerance=tol, vertex=wv, edge=we,
+                             vertex_ci95=civ, edge_ci95=cie,
                              n_min=int(n.min()), n_max=int(n.max()), n_total=int(n.sum()),
-                             formatted=fmt(omega, ci))
+                             formatted=fmt(omega, ci), vertex_formatted=fmt(wv, civ), edge_formatted=fmt(we, cie))
         ps = f"{pval:.2e}" if pval is not None else "-"
-        print(f"{name:26s} {omega:8.5f} {ci:8.5f} {wv:7.4f} {we:7.4f} {nstr:>11s} {ps:>10s}  {fmt(omega, ci)}")
+        if tol is not None:
+            print(f"   {name}: worst-case null level at the sup = {null_log_pvalue(omega, n, OMEGA_C)[1]:.6f} (omega_c = {OMEGA_C:.6f}), leakage tolerance {tol:.5f}")
+        print(f"{name:26s} {omega:8.5f} {ci:8.5f} {wv:7.4f} {we:7.4f} {nstr:>11s} {ps:>10s}  "
+              f"{fmt(omega, ci)}  {fmt(wv, civ)}  {fmt(we, cie)}")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(results, indent=2))
     print(f"wrote {OUT}")

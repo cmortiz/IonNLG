@@ -30,7 +30,7 @@ def bar_figure():
         ["Gold", "Silver", "Aria", "Blue", "Forte (2026-03)", "Forte (2026-06)", "H2"],
         key=lambda k: R[k]["omega"],
     )
-    labels = {"Forte (2026-03)": "Forte\n(Mar 2026)", "Forte (2026-06)": "Forte\n(Jun 2026)"}
+    labels = {"Forte (2026-03)": "Forte", "Forte (2026-06)": "Forte\nEnterprise"}
     fig, ax = plt.subplots(figsize=(6.2, 3.6), dpi=300)
     x = np.arange(len(order))
     for i, k in enumerate(order):
@@ -92,10 +92,10 @@ def frontier_figure():
         ax.scatter(wv, we, s=55 if strategy == "4q" else 75, color=c, marker="o", zorder=3,
                    edgecolor="none")
     ions = [("Silver", "umd", "Silver"), ("Gold", "duke", "Gold"), ("Blue", "duke", "Blue"),
-            ("Aria", "ionq", "Aria"), ("Forte (2026-03)", "ionq", "Forte (Mar)"),
-            ("Forte (2026-06)", "ionq", "Forte (Jun)"), ("H2", "quantinuum", "H2")]
+            ("Aria", "ionq", "Aria"), ("Forte (2026-03)", "ionq", "Forte"),
+            ("Forte (2026-06)", "ionq", "Forte\nEnterprise"), ("H2", "quantinuum", "H2")]
     # label anchor (data coords) and alignment; most points get leader lines into the empty
-    # region below the diagonal, Forte (Mar) and H2 are labelled beside the marker
+    # region below the diagonal, Forte and H2 are labelled beside the marker
     place = {"Blue": ((0.964, 0.954), "left", True), "Silver": ((0.950, 0.940), "left", True),
              "Aria": ((0.937, 0.927), "left", True), "Forte (2026-06)": ((0.924, 0.914), "left", True),
              "Gold": ((0.911, 0.901), "left", True), "Forte (2026-03)": ((0.924, 0.981), "right", False),

@@ -2,6 +2,9 @@
 
 Answers follow the convention of src/IonNLG/adapters/trapped_ion.py: a0 = outcome % 4, a1 = outcome // 4.
 Circuit (u, v) gives question x0 = u to player 0 and x1 = v to player 1.
+Ratios are smoothed, R_eta = (1 - eta) f_train / P*_NS + eta: a convex mix of the PBR and 1, so the
+Bell-like inequality of Tabia et al. still holds and no ratio is zero (an outcome absent from the
+training fold no longer sets t = 0). Each fold is reported separately for every eta in ETAS.
 """
 import ast
 import json
@@ -17,6 +20,7 @@ from nonsignaling import NonSignalingRegression, pvalue_score  # noqa: E402
 from ion_winrates import RAW, denominator  # noqa: E402
 
 CIRCUITS = RAW / "circuits"
+ETAS = [0.01, 0.1, 0.5, 0.9]
 pat = re.compile(r"line (\d+) \((\d+), (\d+)\)")
 QMAP = {int(m.group(1)): (int(m.group(2)), int(m.group(3)))
         for f in CIRCUITS.glob("*.txt") if (m := pat.match(f.stem))}
@@ -60,9 +64,14 @@ def run(name, counts, swap=False, seed=0):
     for fold, (train, test) in enumerate(kf.split(X)):
         model = NonSignalingRegression(2, 14, 4, P_x=P_x)
         model.fit(X[train])
-        p = pvalue_score(model.predict(X[test]))
-        out.append((model._kl_div, p))
-        print(f"{name}{' (players swapped)' if swap else ''} fold {fold}: N={len(X)} kl={model._kl_div:.4e} p_U={p:.4g}")
+        r0 = model._R.copy()
+        ps = {}
+        for eta in ETAS:
+            model._R = (1 - eta) * r0 + eta
+            ps[eta] = pvalue_score(model.predict(X[test]))
+        out.append((model._kl_div, ps))
+        print(f"{name}{' (players swapped)' if swap else ''} fold {fold}: N={len(X)} kl={model._kl_div:.4e} "
+              + " ".join(f"p_U(eta={e})={p:.3g}" for e, p in ps.items()))
     return out
 
 
@@ -76,5 +85,6 @@ if __name__ == "__main__":
     if "h2-swap" in which:
         res["H2 swapped"] = run("H2", h2_counts(), swap=True)
     out = Path(__file__).parents[1] / "data/processed_data/trapped_ion/pbr_results.json"
-    out.write_text(json.dumps({k: [{"kl": a, "p_U": b} for a, b in v] for k, v in res.items()}, indent=2))
+    out.write_text(json.dumps({k: [{"kl": a, "p_U": {str(e): p for e, p in b.items()}} for a, b in v]
+                               for k, v in res.items()}, indent=2))
     print("wrote", out)
