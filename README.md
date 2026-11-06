@@ -21,6 +21,8 @@ PNNL Report Number: PNNL-SA-221109
   runs the PBR non-signaling test on the Blue and H2 data and writes
   `data/processed_data/trapped_ion/pbr_results.json`; `edge_order.py` prints the edge-order tolerance and
   the comparison with 87/88, the classical value of the 51 circuits as run (Supplementary Note 2);
+  `marginal_homogeneity.py` prints the Pearson test of marginal homogeneity, its bootstrap p-values, and
+  the win rate of the fitted non-signaling distribution (Supplementary Note 3);
   `make_figures.py` regenerates the win-rate figures in `figures/` and needs the superconducting
   experiment database of Furches et al. (2025), which is not included here.
 - `figures/`: the win-rate figures of the paper (Figs. 2 and 3).
@@ -31,4 +33,5 @@ To reproduce the trapped-ion numbers in the paper:
 uv run python scripts/ion_winrates.py
 uv run python scripts/pbr_test.py
 uv run python scripts/edge_order.py
+uv run python scripts/marginal_homogeneity.py
 ```
